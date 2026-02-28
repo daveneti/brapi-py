@@ -1,0 +1,36 @@
+apply plugin : "java"
+ext {
+  javaMainClass = 'org.brapi.schematools.cli.BrAPICommand'
+  brapiSchemaToolsVersion = '0.54.0'
+}
+
+repositories {
+  mavenCentral()
+  maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
+}
+
+dependencies {
+  implementation "org.brapi.brapi-schema-tools:brapi-schema-tools-cli:$brapiSchemaToolsVersion"
+}
+
+tasks.register("generateR", JavaExec) {
+  group = 'BrAPI'
+  description = 'Generate R files from the JSON Schema'
+  classpath = sourceSets.main.runtimeClasspath
+  mainClass = javaMainClass
+  workingDir = '../'
+  def specificationDirectory = '../BrAPI/Specification/BrAPI-Schema'
+  def filename = "pkg/R"
+  args = ['generate', specificationDirectory,
+          '-l', 'R',
+          '-f', filename,
+          '-o', 'generator/r-options.yaml',
+         // '-m', 'generator/r-metadata.yaml',
+          '-x',
+          '-r',
+          '-t']
+}
+
+tasks.register("generateAll") {
+  dependsOn generateR
+}

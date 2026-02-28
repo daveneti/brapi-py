@@ -1,0 +1,1 @@
+## BrAPI Germplasm entity — generated

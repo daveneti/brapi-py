@@ -17,7 +17,6 @@ from datetime import date, datetime
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
-
 if TYPE_CHECKING:
     from brapi.entities.generated_germplasm import Germplasm
     from brapi.entities.generated_crossing_project import CrossingProject

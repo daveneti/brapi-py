@@ -18,9 +18,6 @@ from datetime import date, datetime
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
-if TYPE_CHECKING:
-    
-
 
 from .._query import BaseQuery
 from .._http import HttpTransport

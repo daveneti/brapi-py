@@ -17,7 +17,6 @@ from datetime import date, datetime
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
-
 if TYPE_CHECKING:
     from brapi.entities.generated_planned_cross import PlannedCross
     from brapi.entities.generated_observation_unit import ObservationUnit

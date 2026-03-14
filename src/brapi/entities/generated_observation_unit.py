@@ -17,7 +17,6 @@ from datetime import date, datetime
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
-
 if TYPE_CHECKING:
     from brapi.entities.generated_trial import Trial
     from brapi.entities.generated_study import Study

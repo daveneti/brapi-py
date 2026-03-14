@@ -6,7 +6,8 @@ from .client import BrapiClient
 from ._result import BrapiResult
 from ._auth import build_auth, OAuth2ClientCredentialsAuth, OAuth2PasswordAuth
 
-from .entities.germplasm import Germplasm, GermplasmQuery
+from .entities import *
+from .entities import __all__ as _entities_all
 
 __all__ = [
     "__version__",
@@ -15,6 +16,5 @@ __all__ = [
     "build_auth",
     "OAuth2ClientCredentialsAuth",
     "OAuth2PasswordAuth",
-    "Germplasm",
-    "GermplasmQuery",
+    *_entities_all,
 ]

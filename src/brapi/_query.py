@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
 
 import pandas as pd
 
@@ -91,6 +91,11 @@ class BaseQuery(Generic[T]):
         clone = copy.copy(self)
         clone._params = {k: v for k, v in self._params.items() if k != key}
         return clone
+
+    @staticmethod
+    def _listify(value: Union[str, List[str]]) -> List[str]:
+        """Normalise a bare string or a list of strings to always return a list."""
+        return [value] if isinstance(value, str) else list(value)
 
     # ------------------------------------------------------------------
     # Common filter methods (applicable to most BrAPI entities)
@@ -199,7 +204,9 @@ class BaseQuery(Generic[T]):
 
         return BrapiResult(fetcher=_fetcher_json, to_df_fn=to_df_fn)  # type: ignore[arg-type]
 
-    def stream(self) -> "BaseQuery[T]":
+    from typing import Generator
+
+    def stream(self) -> Generator[List[T], None, None]:
         """
         Return a page-streaming iterator (does not buffer all pages in memory).
 

@@ -25,7 +25,7 @@ class BaseBrapiClient:
     subclass which adds entity query entry points.
 
     Args:
-        base_url: BrAPI server root URL (e.g. ``https://phenomeone.basf.net``).
+        base_url: BrAPI server root URL (e.g. ``https://example.com``).
         token_endpoint: OAuth2 token endpoint URL.
         client_id: OAuth2 client ID (client-credentials flow).
         client_secret: OAuth2 client secret (client-credentials flow).
@@ -59,6 +59,7 @@ class BaseBrapiClient:
             client_secret=client_secret,
             username=username,
             password=password,
+            verify_ssl=verify_ssl,
         )
 
         # Lazily initialised transport (shared across all entity queries)

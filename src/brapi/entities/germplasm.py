@@ -197,7 +197,7 @@ def germplasm_to_df(items: List[Germplasm]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 _SEARCH_ENDPOINT = "search/germplasm"
-_TABLE_ENDPOINT = "search/germplasm/table"
+_SEARCH_TABLE_ENDPOINT = "search/germplasm/table"
 _CRUD_ENDPOINT = "germplasm"
 
 # Maps POST /search/germplasm body parameter names → GET /germplasm query parameter
@@ -259,9 +259,9 @@ class GermplasmQuery(BaseQuery[Germplasm]):
         df     = q1.list().to_df()      # GET  /germplasm
         items  = list(q1.search())      # iterate directly
 
-    Use the ZIP/CSV table endpoint (fastest for large exports)::
+    Use the ZIP/CSV search-table endpoint (fastest for large exports)::
 
-        df = client.germplasm.by_crop(["Wheat"]).as_table().fetch().to_df()
+        df = client.germplasm.by_crop(["Wheat"]).as_search_table().fetch().to_df()
     """
 
     def __init__(self, http: HttpTransport) -> None:
@@ -270,7 +270,7 @@ class GermplasmQuery(BaseQuery[Germplasm]):
             endpoint=_SEARCH_ENDPOINT,
             model_cls=Germplasm,
             http_method="POST",
-            table_endpoint=_TABLE_ENDPOINT,
+            search_table_endpoint=_SEARCH_TABLE_ENDPOINT,
             to_df_fn=germplasm_to_df,
         )
 

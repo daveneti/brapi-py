@@ -32,7 +32,8 @@ class BaseQuery(Generic[T]):
     Fluent query builder base class.
 
     Subclasses should:
-    1. Supply ``endpoint`` (JSON) and optionally ``table_endpoint`` (ZIP/CSV).
+    1. Supply ``endpoint`` (JSON) and optionally ``table_endpoint`` (GET CSV) or
+       ``search_table_endpoint`` (POST ZIP/CSV).
     2. Implement a ``_parse(record: dict) -> T`` classmethod or staticmethod.
     3. Add entity-specific filter methods that delegate to ``_set_param()``.
 
@@ -41,7 +42,9 @@ class BaseQuery(Generic[T]):
         endpoint: Primary BrAPI endpoint (paginated JSON).
         model_cls: Pydantic model class used to parse individual records.
         http_method: ``"GET"`` or ``"POST"`` for the JSON endpoint.
-        table_endpoint: Optional ZIP/CSV endpoint (e.g. ``search/germplasm/table``).
+        table_endpoint: Optional direct CSV endpoint (``GET /<entity>/table``).
+        search_table_endpoint: Optional ZIP/CSV endpoint
+            (``POST search/<entity>/table``, returns a download URL).
         to_df_fn: Optional callable ``(List[T]) -> pd.DataFrame`` for custom
             DataFrame conversion (e.g. to flatten nested fields).
         default_page_size: Default number of records per JSON page.
@@ -54,6 +57,7 @@ class BaseQuery(Generic[T]):
         model_cls: Type[T],
         http_method: str = "POST",
         table_endpoint: Optional[str] = None,
+        search_table_endpoint: Optional[str] = None,
         to_df_fn: Optional[Callable[[List[T]], pd.DataFrame]] = None,
         default_page_size: int = 1000,
     ) -> None:
@@ -62,13 +66,14 @@ class BaseQuery(Generic[T]):
         self._model_cls = model_cls
         self._http_method = http_method
         self._table_endpoint = table_endpoint
+        self._search_table_endpoint = search_table_endpoint
         self._to_df_fn = to_df_fn
         self._default_page_size = default_page_size
 
         self._params: Dict[str, Any] = {}
         self._page_size: int = default_page_size
         self._max_pages: Optional[int] = None
-        self._use_table: bool = False  # True → use ZIP/CSV endpoint
+        self._fetch_mode: str = "json"  # "json" | "table" | "search_table"
 
     # ------------------------------------------------------------------
     # Internal helpers — used by subclass filter methods
@@ -133,11 +138,10 @@ class BaseQuery(Generic[T]):
 
     def as_table(self) -> "BaseQuery[T]":
         """
-        Switch to the ZIP/CSV table endpoint for this query.
+        Switch to the direct CSV table endpoint for this query
+        (``GET /<entity>/table`` — returns CSV text).
 
-        When materialised, ``fetch_zip_csv`` will be called instead of
-        ``fetch_all_pages``.  The same model class is used to parse rows;
-        column names from the CSV are matched to model fields by name.
+        When materialised, ``fetch_csv_table`` will be called.
 
         Raises:
             ValueError: If no ``table_endpoint`` was configured for this entity.
@@ -149,7 +153,29 @@ class BaseQuery(Generic[T]):
             )
         clone = copy.copy(self)
         clone._params = dict(self._params)
-        clone._use_table = True
+        clone._fetch_mode = "table"
+        return clone
+
+    def as_search_table(self) -> "BaseQuery[T]":
+        """
+        Switch to the ZIP/CSV search-table endpoint for this query
+        (``POST search/<entity>/table`` — server returns a download URL).
+
+        When materialised, ``fetch_zip_csv`` will be called.
+        The same model class is used to parse rows; column names from the CSV
+        are matched to model fields by name.
+
+        Raises:
+            ValueError: If no ``search_table_endpoint`` was configured for this entity.
+        """
+        if not self._search_table_endpoint:
+            raise ValueError(
+                f"No search-table endpoint configured for this query "
+                f"(JSON endpoint: {self._endpoint})"
+            )
+        clone = copy.copy(self)
+        clone._params = dict(self._params)
+        clone._fetch_mode = "search_table"
         return clone
 
     # ------------------------------------------------------------------
@@ -170,20 +196,33 @@ class BaseQuery(Generic[T]):
         params = dict(self._params)
         page_size = self._page_size
         max_pages = self._max_pages
-        use_table = self._use_table
+        fetch_mode = self._fetch_mode
 
-        if use_table:
+        if fetch_mode == "table":
             endpoint = self._table_endpoint
             http = self._http
             model_cls = self._model_cls
             to_df_fn = self._to_df_fn
 
             def _fetcher_table() -> List[T]:
+                rows, metadata = http.fetch_csv_table(endpoint=endpoint, params=params)  # type: ignore[arg-type]
+                logger.debug("CSV table fetch metadata: %s", metadata)
+                return [model_cls(**row) for row in rows]  # type: ignore[call-arg]
+
+            return BrapiResult(fetcher=_fetcher_table, to_df_fn=to_df_fn)  # type: ignore[arg-type]
+
+        if fetch_mode == "search_table":
+            endpoint = self._search_table_endpoint
+            http = self._http
+            model_cls = self._model_cls
+            to_df_fn = self._to_df_fn
+
+            def _fetcher_search_table() -> List[T]:
                 rows, metadata = http.fetch_zip_csv(endpoint=endpoint, params=params)  # type: ignore[arg-type]
                 logger.debug("ZIP/CSV fetch metadata: %s", metadata)
                 return [model_cls(**row) for row in rows]  # type: ignore[call-arg]
 
-            return BrapiResult(fetcher=_fetcher_table, to_df_fn=to_df_fn)  # type: ignore[arg-type]
+            return BrapiResult(fetcher=_fetcher_search_table, to_df_fn=to_df_fn)  # type: ignore[arg-type]
 
         # JSON pagination path
         endpoint = self._endpoint
@@ -234,7 +273,7 @@ class BaseQuery(Generic[T]):
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        mode = "table" if self._use_table else "json"
+        mode = self._fetch_mode
         return (
             f"{self.__class__.__name__}("
             f"endpoint={self._endpoint!r}, mode={mode!r}, "

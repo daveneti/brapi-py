@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from datetime import date, datetime
+from enum import Enum, IntEnum
+from strenum import StrEnum
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
     from brapi.entities.generated_germplasm_attribute_value import GermplasmAttributeValue
     from brapi.entities.generated_breeding_method import BreedingMethod
     
-from brapi.generated_common import GermplasmOrigin, ExternalReference, BiologicalStatusOfAccessionCode, AdditionalInfo
+from brapi.generated_common import GermplasmOrigin, ExternalReference, BiologicalStatusOfAccessionCode, AdditionalInfo, StorageTypeCode
 
 from .._query import BaseQuery
 from .._http import HttpTransport
@@ -49,12 +51,10 @@ class TaxonId(BaseModel):
     sourceName: str = None
 
 
-
 class Synonym(BaseModel):
     """"""
 
     model_config = ConfigDict(extra="allow")
-
 
     # --- Scalar optional ---
     synonym: Optional[str] = None
@@ -66,39 +66,15 @@ class StorageType(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-
     # --- Scalar optional ---
+    code: Optional[StorageTypeCode] = None
     description: Optional[str] = None
-
-
-class GermplasmMCPD(BaseModel):
-    """"""
-
-    model_config = ConfigDict(extra="allow")
-
-    # --- Required ---
-    commonCropName: str = None
-    germplasm: Germplasm = None
-
-    # --- Scalar optional ---
-    accessionNumber: Optional[str] = None
-    acquisitionDate: Optional[date] = None
-    ancestralData: Optional[str] = None
-    countryOfOrigin: Optional[str] = None
-    genus: Optional[str] = None
-    instituteCode: Optional[str] = None
-    remarks: Optional[str] = None
-    species: Optional[str] = None
-    speciesAuthority: Optional[str] = None
-    subtaxon: Optional[str] = None
-    subtaxonAuthority: Optional[str] = None
 
 
 class Donor(BaseModel):
     """"""
 
     model_config = ConfigDict(extra="allow")
-
 
     # --- Scalar optional ---
     donorAccessionNumber: Optional[str] = None
@@ -123,13 +99,7 @@ class Germplasm(BaseModel):
     ``storageTypes``,
     ``synonyms``,
     ``taxonIds``,
-    ``samples``,
-    ``attributeValues``,
-    ``progenyPedigreeNodes``,
-    ``parentPedigreeNodes``,
-    ``siblingPedigreeNodes``,
-    ``observations``,
-    ``observationUnits``) are parsed into sub-models when present; unknown extra fields are
+    ``samples``) are parsed into sub-models when present; unknown extra fields are
     accepted (``extra="allow"``) to survive schema evolution without breaking.
     """
 
@@ -168,21 +138,11 @@ class Germplasm(BaseModel):
     synonyms: Optional[List[Synonym]] = None
     taxonIds: Optional[List[TaxonId]] = None
     samples: Optional[List[Sample]] = None
-    attributeValues: Optional[List[GermplasmAttributeValue]] = None
-    progenyPedigreeNodes: Optional[List[PedigreeNode]] = None
-    parentPedigreeNodes: Optional[List[PedigreeNode]] = None
-    siblingPedigreeNodes: Optional[List[PedigreeNode]] = None
-    observations: Optional[List[Observation]] = None
-    observationUnits: Optional[List[ObservationUnit]] = None
-    # --- Relationship IDs (many-to-one; full objects are dropped in list endpoints) ---
-    # These arrive as simple dicts when present; use Any to avoid failures.
+    # --- Relationship fields (embedded objects and enums) ---
 
-    additionalInfo: Optional[Any] = None
-    biologicalStatusOfAccessionCode: Optional[Any] = None
-    breedingMethod: Optional[Any] = None
-    mcpd: Optional[Any] = None
-    reference: Optional[Any] = None
-    referenceSet: Optional[Any] = None
+    additionalInfo: Optional[AdditionalInfo] = None
+    biologicalStatusOfAccessionCode: Optional[BiologicalStatusOfAccessionCode] = None
+    breedingMethod: Optional[BreedingMethod] = None
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +153,15 @@ def germplasm_to_df(items: List[Germplasm]) -> pd.DataFrame:
     """
     Convert a list of ``Germplasm`` objects to a flat ``pd.DataFrame``.
 
-    Nested sub-model lists (``) are serialised to JSON strings so each Germplasm remains
-    one row.  Relationship objects (``) are expanded one level: any ``*DbId`` and ``*Name`` fields are hoisted
+    Nested sub-model lists (``donors``,
+    ``externalReferences``,
+    ``germplasmOrigin``,
+    ``storageTypes``,
+    ``synonyms``,
+    ``taxonIds``,
+    ``samples``) are serialised to JSON strings so each Germplasm remains
+    one row.  Relationship objects (``additionalInfo``,
+    ``breedingMethod``) are expanded one level: any ``*DbId`` and ``*Name`` fields are hoisted
     to top-level columns.
     """
     rows: List[Dict[str, Any]] = []
@@ -203,6 +170,9 @@ def germplasm_to_df(items: List[Germplasm]) -> pd.DataFrame:
 
         # Flatten one-to-one relationships: extract DbId/Name into top-level cols
         for rel in (
+
+            "additionalInfo",
+            "breedingMethod",
 
         ):
             obj = row.pop(rel, None)
@@ -213,6 +183,14 @@ def germplasm_to_df(items: List[Germplasm]) -> pd.DataFrame:
 
         # Serialise one-to-many lists to strings (one row per Germplasm)
         for arr_field in (
+
+            "donors",
+            "externalReferences",
+            "germplasmOrigin",
+            "storageTypes",
+            "synonyms",
+            "taxonIds",
+            "samples",
 
         ):
             arr = row.pop(arr_field, None)
@@ -228,12 +206,13 @@ def germplasm_to_df(items: List[Germplasm]) -> pd.DataFrame:
 # Query builder
 # ---------------------------------------------------------------------------
 
-_CRUD_ENDPOINT = "/germplasm"
-_SEARCH_ENDPOINT = "/search/germplasm"
+_CRUD_ENDPOINT = "germplasm"
+_SEARCH_ENDPOINT = "search/germplasm"
+_SEARCH_TABLE_ENDPOINT = "search/germplasm/table"
 
-# Maps POST /search/germplasm body parameter names → GET /germplasm query parameter
+# Maps POST search/germplasm body parameter names → GET germplasm query parameter
 # names.  Parameters absent from this dict (or mapped to None) are not forwarded
-# to the list endpoint because GET /germplasm does not support them.
+# to the list endpoint because GET germplasm does not support them.
 _LIST_PARAM_MAP: Dict[str, Optional[str]] = {
     "commonCropNames": "commonCropName", 
     "germplasmDbIds": "germplasmDbId", 
@@ -250,11 +229,12 @@ _LIST_PARAM_MAP: Dict[str, Optional[str]] = {
     "familyCodes": "familyCode", 
     "instituteCodes": "instituteCode", 
     "binomialNames": "binomialName", 
-    "genus": "genu", 
-    "species": "specy", 
     "synonyms": "synonym", 
     "parentDbIds": "parentDbId", 
-    "progenyDbIds": "progenyDbId"
+    "progenyDbIds": "progenyDbId", 
+    # Already singular — pass through unchanged:
+    "genus": "genus", 
+    "species": "species"
     
 }
 class GermplasmQuery(BaseQuery[Germplasm]):
@@ -278,14 +258,19 @@ class GermplasmQuery(BaseQuery[Germplasm]):
         result = q1.fetch()          # BrapiResultGermplasm] (lazy)
         df     = q1.fetch().to_df()  # triggers HTTP, returns DataFrame
         items  = list(q1.fetch())    # same
+
+    Use the ZIP/CSV search-table endpoint (faster for large datasets)::
+
+        df = client.germplasm.common_crop_names(&quot;Tomatillo&quot;).as_search_table().fetch().to_df()
     """
 
     def __init__(self, http: HttpTransport) -> None:
         super().__init__(
             http=http,
-            endpoint=_CRUD_ENDPOINT,
+            endpoint=_SEARCH_ENDPOINT,
             model_cls=Germplasm,
             http_method="POST",
+            search_table_endpoint=_SEARCH_TABLE_ENDPOINT,
             to_df_fn=germplasm_to_df,
         )
 
@@ -357,7 +342,7 @@ Use `GET /commoncropnames` to find the list of available crops on a server.
 
     # --- programDbIds ---
 
-    def program_dbids(self, program_dbids: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_program_dbid(self, program_dbids: Union[str, List[str]]) -> "GermplasmQuery":
         """A BrAPI Program represents the high level organization or group who is responsible for conducting trials and studies. Things like Breeding Programs and Funded Projects are considered BrAPI Programs. 
 
 Use this parameter to only return results associated with the given programs. 
@@ -366,12 +351,12 @@ Use `GET /programs` to find the list of available programs on a server.
 
         Example::
             client.germplasm
-                .program_dbids("8f5de35b")
+                .by_program_dbid("8f5de35b")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .program_dbids(["8f5de35b", "0e2d4a13"])
+                .by_program_dbid(["8f5de35b", "0e2d4a13"])
                 .fetch()
                 .to_df()
             
@@ -380,19 +365,19 @@ Use `GET /programs` to find the list of available programs on a server.
 
     # --- programNames ---
 
-    def program_names(self, program_names: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_program_name(self, program_names: Union[str, List[str]]) -> "GermplasmQuery":
         """Use this parameter to only return results associated with the given program names. Program names are not required to be unique.
 
 Use `GET /programs` to find the list of available programs on a server.
 
         Example::
             client.germplasm
-                .program_names("Better Breeding Program")
+                .by_program_name("Better Breeding Program")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .program_names(["Better Breeding Program", "Best Breeding Program"])
+                .by_program_name(["Better Breeding Program", "Best Breeding Program"])
                 .fetch()
                 .to_df()
             
@@ -401,17 +386,17 @@ Use `GET /programs` to find the list of available programs on a server.
 
     # --- studyDbIds ---
 
-    def study_dbids(self, study_dbids: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_study_dbid(self, study_dbids: Union[str, List[str]]) -> "GermplasmQuery":
         """List of study identifiers to search for
 
         Example::
             client.germplasm
-                .study_dbids("cf6c4bd4")
+                .by_study_dbid("cf6c4bd4")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .study_dbids(["cf6c4bd4", "691e69d6"])
+                .by_study_dbid(["cf6c4bd4", "691e69d6"])
                 .fetch()
                 .to_df()
             
@@ -420,17 +405,17 @@ Use `GET /programs` to find the list of available programs on a server.
 
     # --- studyNames ---
 
-    def study_names(self, study_names: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_study_name(self, study_names: Union[str, List[str]]) -> "GermplasmQuery":
         """List of study names to filter search results
 
         Example::
             client.germplasm
-                .study_names("The First Bob Study 2017")
+                .by_study_name("The First Bob Study 2017")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .study_names(["The First Bob Study 2017", "Wheat Yield Trial 246"])
+                .by_study_name(["The First Bob Study 2017", "Wheat Yield Trial 246"])
                 .fetch()
                 .to_df()
             
@@ -439,17 +424,17 @@ Use `GET /programs` to find the list of available programs on a server.
 
     # --- trialDbIds ---
 
-    def trial_dbids(self, trial_dbids: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_trial_dbid(self, trial_dbids: Union[str, List[str]]) -> "GermplasmQuery":
         """The ID which uniquely identifies a trial to search for
 
         Example::
             client.germplasm
-                .trial_dbids("d2593dc2")
+                .by_trial_dbid("d2593dc2")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .trial_dbids(["d2593dc2", "9431a731"])
+                .by_trial_dbid(["d2593dc2", "9431a731"])
                 .fetch()
                 .to_df()
             
@@ -458,17 +443,17 @@ Use `GET /programs` to find the list of available programs on a server.
 
     # --- trialNames ---
 
-    def trial_names(self, trial_names: Union[str, List[str]]) -> "GermplasmQuery":
+    def by_trial_name(self, trial_names: Union[str, List[str]]) -> "GermplasmQuery":
         """The human readable name of a trial to search for
 
         Example::
             client.germplasm
-                .trial_names("All Yield Trials 2016")
+                .by_trial_name("All Yield Trials 2016")
                 .fetch()
                 .to_df()
             
             client.germplasm
-                .trial_names(["All Yield Trials 2016", "Disease Resistance Study Comparison Group"])
+                .by_trial_name(["All Yield Trials 2016", "Disease Resistance Study Comparison Group"])
                 .fetch()
                 .to_df()
             
@@ -731,6 +716,46 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
             )
         """
         q: GermplasmQuery = self
+        if common_crop_names:
+            q = q.common_crop_names(common_crop_names)
+        if germplasm_dbids:
+            q = q.germplasm_dbids(germplasm_dbids)
+        if germplasm_names:
+            q = q.germplasm_names(germplasm_names)
+        if program_dbids:
+            q = q.by_program_dbid(program_dbids)
+        if program_names:
+            q = q.by_program_name(program_names)
+        if study_dbids:
+            q = q.by_study_dbid(study_dbids)
+        if study_names:
+            q = q.by_study_name(study_names)
+        if trial_dbids:
+            q = q.by_trial_dbid(trial_dbids)
+        if trial_names:
+            q = q.by_trial_name(trial_names)
+        if germplasm_puis:
+            q = q.germplasm_puis(germplasm_puis)
+        if accession_numbers:
+            q = q.accession_numbers(accession_numbers)
+        if collections:
+            q = q.collections(collections)
+        if family_codes:
+            q = q.family_codes(family_codes)
+        if institute_codes:
+            q = q.institute_codes(institute_codes)
+        if binomial_names:
+            q = q.binomial_names(binomial_names)
+        if genus:
+            q = q.genus(genus)
+        if species:
+            q = q.species(species)
+        if synonyms:
+            q = q.synonyms(synonyms)
+        if parent_dbids:
+            q = q.parent_dbids(parent_dbids)
+        if progeny_dbids:
+            q = q.progeny_dbids(progeny_dbids)
         return q
 
     # ------------------------------------------------------------------
@@ -743,7 +768,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         max_poll_attempts: int = 30,
     ) -> BrapiResult[Germplasm]:
         """
-        Execute the query by POSTing to ``POST /search/germplasm``.
+        Execute the query by POSTing to ``POST search/germplasm``.
 
         Handles both the **synchronous** (HTTP 200, immediate ``result.data``)
         and **asynchronous** (HTTP 202, ``searchResultsDbId`` + polling) BrAPI
@@ -794,7 +819,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         page_size: Optional[int] = None,
     ) -> BrapiResult[Germplasm]:
         """
-        Execute the query by calling ``GET /germplasm``.
+        Execute the query by calling ``GET germplasm``.
 
         Uses the same filter state built with the fluent methods.  Parameters
         that accept multiple values are passed as repeated query-string keys so
@@ -833,7 +858,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         for search_key, value in self._params.items():
             get_key = _LIST_PARAM_MAP.get(search_key, search_key)  # default: pass through
             if get_key is None:
-                continue  # not supported on GET /true
+                continue  # not supported on GET germplasm
             # Lists become repeated query-string values; scalars pass through
             get_params[get_key] = value
 
@@ -860,7 +885,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         """
         Retrieve a single Germplasm by its database ID.
 
-        Calls ``GET /germplasm/{germplasmDbId}``.
+        Calls ``GET germplasm/{germplasmDbId}``.
 
         Args:
             germplasm_dbid: The ``germplasmDbId`` to retrieve.
@@ -875,7 +900,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         germplasm: Union["Germplasm", Dict[str, Any]],
     ) -> "Germplasm":
         """
-        Create a single Germplasm record using ``POST //germplasm``.
+        Create a single Germplasm record using ``POST /germplasm``.
 
         The server assigns ``germplasmDbId``; you may omit it from the input.
 
@@ -901,7 +926,7 @@ MCPD (v2.1) (ACCENUMB) 2. This is the unique identifier for accessions within a 
         germplasm: Union["Germplasm", Dict[str, Any]],
     ) -> "Germplasm":
         """
-        Update a Germplasm record using ``PUT //germplasm/{germplasmDbId}``.
+        Update a Germplasm record using ``PUT germplasm/{germplasmDbId}``.
 
         Args:
             germplasm_dbid: The ``germplasmDbId`` of the record to update.

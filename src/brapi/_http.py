@@ -3,7 +3,8 @@ _http.py — Low-level HTTP transport for BrAPI endpoints.
 
 Not generated. Handles:
   - Paginated JSON (GET and POST, BrAPI envelope: result.data + metadata.pagination)
-  - ZIP/CSV table downloads (POST → presigned S3 URL → ZIP → CSV)
+  - Direct CSV table downloads (GET /<entity>/table → CSV text via fetch_csv_table)
+  - ZIP/CSV search-table downloads (POST search/<entity>/table → presigned URL → ZIP → CSV via fetch_zip_csv)
 
 All methods are synchronous. Async support can be layered here later using httpx's
 async client without changing the query/result surface.
@@ -367,6 +368,41 @@ class HttpTransport:
     # ------------------------------------------------------------------
     # ZIP / CSV table endpoints
     # ------------------------------------------------------------------
+
+    def fetch_csv_table(
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+        """
+        GET a BrAPI ``/<entity>/table`` endpoint with ``Accept: text/csv`` and
+        return parsed rows.
+
+        The server returns CSV text directly in the response body.
+
+        Args:
+            endpoint: BrAPI endpoint path (e.g. ``observations/table``).
+            params:   Query parameters.
+
+        Returns:
+            Tuple of:
+              - ``rows``: List of dicts (one per CSV row, column names as-is).
+              - ``metadata``: Dict with ``row_count``.
+
+        Raises:
+            httpx.HTTPStatusError: On HTTP errors.
+        """
+        url = self._url(endpoint)
+        logger.info("GET %s to fetch CSV table", endpoint)
+        response = self._client.get(
+            url, params=params or {}, headers={"Accept": "text/csv"}
+        )
+        response.raise_for_status()
+
+        reader = csv.DictReader(io.StringIO(response.text))
+        rows = list(reader)
+        logger.info("Fetched %d rows from CSV table %s", len(rows), endpoint)
+        return rows, {"row_count": len(rows)}
 
     def fetch_zip_csv(
         self,

@@ -5,7 +5,8 @@
 *.env
 
 # =============================================================================
-# Generated files (produced by the code generator — tracked only on master)
+# Generated files — ignored on develop, tracked on master
+# The CI workflow strips these lines when it merges develop → master.
 # =============================================================================
 src/brapi/_compat.py
 src/brapi/generated_*.py

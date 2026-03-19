@@ -141,12 +141,29 @@ jobs:
           git merge develop --no-edit \
             -m "GitHub Action - Generate Python files from JSON Schema v$RELEASE_VERSION"
 
+          # Remove the generated-file ignore rules that belong only on develop.
+          # On master these files are tracked, so the ignore rules are wrong.
+          # The section looks like:
+          #   # Generated files (produced by the code generator — tracked only on master)
+          #   src/brapi/_compat.py
+          #   src/brapi/generated_*.py
+          #   src/brapi/entities/generated_*.py
+          #   src/brapi/entities/__init__.py
+          sed -i \
+            -e '/^# Generated files (produced by/d' \
+            -e '/^src\/brapi\/_compat\.py$/d' \
+            -e '/^src\/brapi\/generated_\*\.py$/d' \
+            -e '/^src\/brapi\/entities\/generated_\*\.py$/d' \
+            -e '/^src\/brapi\/entities\/__init__\.py$/d' \
+            .gitignore
+
           # Force-add generated files (gitignored on develop, tracked on master)
           git add -f src/brapi/_compat.py
           git add -f src/brapi/generated_*.py
           git add -f src/brapi/entities/generated_*.py
           git add -f src/brapi/entities/__init__.py
           git add -f notebooks/
+          git add .gitignore
 
           git diff --cached --quiet || \
             git commit -m "GitHub Action - Added generated files for v$RELEASE_VERSION"

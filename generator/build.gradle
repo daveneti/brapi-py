@@ -1,7 +1,7 @@
 apply plugin : "java"
 ext {
   javaMainClass = 'org.brapi.schematools.cli.BrAPICommand'
-  brapiSchemaToolsVersion = '0.54.0'
+  brapiSchemaToolsVersion = '0.58.0'
 }
 
 repositories {
@@ -13,24 +13,23 @@ dependencies {
   implementation "org.brapi.brapi-schema-tools:brapi-schema-tools-cli:$brapiSchemaToolsVersion"
 }
 
-tasks.register("generateR", JavaExec) {
+tasks.register("generatePython", JavaExec) {
   group = 'BrAPI'
-  description = 'Generate R files from the JSON Schema'
+  description = 'Generate Python files from the JSON Schema'
   classpath = sourceSets.main.runtimeClasspath
   mainClass = javaMainClass
   workingDir = '../'
   def specificationDirectory = '../BrAPI/Specification/BrAPI-Schema'
-  def filename = "pkg/R"
+  def outputDirectory = './'
   args = ['generate', specificationDirectory,
-          '-l', 'R',
-          '-f', filename,
-          '-o', 'generator/r-options.yaml',
-         // '-m', 'generator/r-metadata.yaml',
+          '-l', 'PYTHON',
+          '-f', outputDirectory,
+          '-o', 'generator/python-options.yaml',
           '-x',
           '-r',
           '-t']
 }
 
 tasks.register("generateAll") {
-  dependsOn generateR
+  dependsOn generatePython
 }

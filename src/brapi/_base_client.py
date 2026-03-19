@@ -8,12 +8,20 @@ the entity entry-point properties.
 """
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 import httpx
 
 from ._auth import build_auth
 from ._http import HttpTransport, DEFAULT_TIMEOUT
+
+# Auto-load a .env file if python-dotenv is installed (optional dependency)
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except ImportError:
+    pass
 
 
 class BaseBrapiClient:
@@ -23,6 +31,24 @@ class BaseBrapiClient:
     Manages authentication, the HTTP transport lifecycle, and context-manager
     support.  Do not instantiate directly — use the generated ``BrapiClient``
     subclass which adds entity query entry points.
+
+    All arguments fall back to environment variables when omitted:
+
+    +------------------+----------------------------+
+    | Argument         | Environment variable       |
+    +==================+============================+
+    | base_url         | ``BRAPI_BASE_URL``         |
+    +------------------+----------------------------+
+    | token_endpoint   | ``BRAPI_TOKEN_ENDPOINT``   |
+    +------------------+----------------------------+
+    | client_id        | ``BRAPI_CLIENT_ID``        |
+    +------------------+----------------------------+
+    | client_secret    | ``BRAPI_CLIENT_SECRET``    |
+    +------------------+----------------------------+
+    | username         | ``BRAPI_USERNAME``         |
+    +------------------+----------------------------+
+    | password         | ``BRAPI_PASSWORD``         |
+    +------------------+----------------------------+
 
     Args:
         base_url: BrAPI server root URL (e.g. ``https://example.com``).
@@ -38,8 +64,8 @@ class BaseBrapiClient:
 
     def __init__(
         self,
-        base_url: str,
-        token_endpoint: str,
+        base_url: Optional[str] = None,
+        token_endpoint: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         username: Optional[str] = None,
@@ -48,6 +74,22 @@ class BaseBrapiClient:
         verify_ssl: bool = True,
         timeout: httpx.Timeout = DEFAULT_TIMEOUT,
     ) -> None:
+        base_url = base_url or os.environ.get("BRAPI_BASE_URL")
+        token_endpoint = token_endpoint or os.environ.get("BRAPI_TOKEN_ENDPOINT")
+        client_id = client_id or os.environ.get("BRAPI_CLIENT_ID")
+        client_secret = client_secret or os.environ.get("BRAPI_CLIENT_SECRET")
+        username = username or os.environ.get("BRAPI_USERNAME")
+        password = password or os.environ.get("BRAPI_PASSWORD")
+
+        if not base_url:
+            raise ValueError(
+                "base_url is required — pass it directly or set BRAPI_BASE_URL in your environment."
+            )
+        if not token_endpoint:
+            raise ValueError(
+                "token_endpoint is required — pass it directly or set BRAPI_TOKEN_ENDPOINT in your environment."
+            )
+
         self._base_url = base_url
         self._api_prefix = api_prefix
         self._verify_ssl = verify_ssl

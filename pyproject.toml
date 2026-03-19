@@ -24,6 +24,7 @@ dev = [
     "pytest-asyncio",
     "respx",           # httpx mock library
     "ruff",
+    "python-dotenv",   # load credentials from .env in notebooks
 ]
 docs = [
     "mkdocs>=1.6",

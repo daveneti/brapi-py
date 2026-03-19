@@ -89,3 +89,90 @@ Each generated entity file must:
 ```bash
 pip install -e ".[dev]"
 ```
+
+---
+
+## Development Workflow
+
+```
+          ┌─────────────────────────────┐
+          │  feature/my-feature branch  │  ← you work here
+          └─────────────┬───────────────┘
+                        │  PR / merge
+                        ▼
+          ┌─────────────────────────────┐
+          │         develop             │  ← non-generated source
+          └─────────────┬───────────────┘
+                        │  GitHub Actions (auto)
+                        ▼
+          ┌─────────────────────────────┐
+          │          master             │  ← generated code + releases
+          └─────────────────────────────┘
+```
+
+### Branches at a glance
+
+| Branch | Purpose | Who pushes |
+|--------|---------|-----------|
+| `master` | Full generated codebase, always releasable. Every merge is tagged and released. | GitHub Actions only |
+| `develop` | Hand-written source code (no generated files). Start all work here. | Developers + Actions (version bump) |
+| `feature/*`, `fix/*`, `chore/*` | Short-lived branches for individual changes. | Developers |
+
+### Starting a new feature or updating the generator
+
+```bash
+# 1. Always branch from develop
+git checkout develop
+git pull origin develop
+git checkout -b feature/my-feature
+
+# 2. Make your changes, commit, push
+git add .
+git commit -m "feat: describe your change"
+git push origin feature/my-feature
+
+# 3. Open a Pull Request into develop and merge it
+```
+
+Once the PR is merged into `develop`, GitHub Actions takes over automatically:
+
+1. **Generate** — runs the BrAPI Schema Tools code generator with the version pinned in `generator/build.gradle`
+2. **Verify** — imports the package to catch any generation errors early
+3. **Version** — computes the next release version (see below) and writes it to `__version__.py` and `pyproject.toml`
+4. **Publish to master** — force-adds all generated files and merges develop into `master`
+5. **Release** — creates a Git tag (`v1.2.3`) and a GitHub Release with auto-generated notes
+
+### Version numbering
+
+The minor version is **automatically incremented** unless you change it yourself.
+
+| Scenario | What to do | Result |
+|----------|-----------|--------|
+| Routine change (new feature, dependency update, generator bump) | Nothing — leave `__version__` as-is | `0.1.0` → `0.2.0` (minor bump) |
+| Breaking API change | Edit `src/brapi/__version__.py` and `pyproject.toml` on your feature branch to the new major version | `0.2.0` → `1.0.0` (honoured as-is) |
+| Targeted patch release | Set a specific version on your feature branch | `0.2.0` → `0.2.1` (honoured as-is) |
+
+The rule: if `__version__` in `develop` equals the latest release tag, the minor version is bumped automatically. If the versions differ, your manually set value is used.
+
+The version bump commit is pushed back to `develop` with `[skip ci]` so it doesn't re-trigger the workflow.
+
+### Updating the generator schema version
+
+The BrAPI Schema Tools generator version is set in `generator/build.gradle`:
+
+```groovy
+ext {
+    brapiSchemaToolsVersion = '0.58.0'   // ← change this
+}
+```
+
+Update this value on a feature branch, open a PR into `develop`, and the rest is automatic.
+
+### Required GitHub repository secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `DEPLOY_KEY` | SSH deploy key with **write** access, used to push generated commits back to `master` and `develop`. Generate with `ssh-keygen -t ed25519`, add the public key as a Deploy Key (with write access) in *Settings → Deploy keys*, and store the private key as this secret. |
+
+The `GITHUB_TOKEN` (automatically provided by Actions) is used only to create the GitHub Release.
+

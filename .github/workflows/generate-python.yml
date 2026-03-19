@@ -9,8 +9,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout brapi-py (develop branch)
+      # ── 1. Checkout develop ────────────────────────────────────────────────
+      - name: Checkout brapi-py (develop)
         uses: actions/checkout@v4
         with:
           ref: develop
@@ -18,54 +21,148 @@ jobs:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
           path: repo
 
+      # ── 2. Skip bot-created commits to avoid infinite loops ────────────────
+      - name: Check for [skip ci] marker
+        id: skip
+        working-directory: ./repo
+        run: |
+          MSG=$(git log -1 --pretty=format:'%s')
+          if echo "$MSG" | grep -qE '^\[skip ci\]'; then
+            echo "Skipping bot commit: $MSG"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 3. Checkout BrAPI schema ───────────────────────────────────────────
       - name: Checkout BrAPI schema
+        if: steps.skip.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: plantbreeding/BrAPI
           path: BrAPI
 
+      # ── 4. Generate Python code from JSON Schema ───────────────────────────
       - name: Set up JDK 21
+        if: steps.skip.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Change wrapper permissions
+        if: steps.skip.outputs.skip != 'true'
         working-directory: ./repo/generator
         run: chmod +x ./gradlew
 
       - name: Generate Python code
+        if: steps.skip.outputs.skip != 'true'
         working-directory: ./repo/generator
         run: ./gradlew generatePython
 
+      # ── 5. Verify the generated code is importable ─────────────────────────
       - name: Set up Python
+        if: steps.skip.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
 
       - name: Verify generated code imports cleanly
+        if: steps.skip.outputs.skip != 'true'
         working-directory: ./repo
         run: |
           pip install -e ".[dev]"
           python -c "import brapi; print('brapi-py version:', brapi.__version__)"
 
-      - name: Commit generated files to master
+      # ── 6. Compute release version ─────────────────────────────────────────
+      # Auto-bumps the minor version when the developer has not manually changed
+      # the version in develop since the last release.  A manual bump (any change
+      # to __version__.py that makes the version differ from the latest tag) is
+      # always respected as-is.
+      - name: Compute release version
+        if: steps.skip.outputs.skip != 'true'
+        id: version
         working-directory: ./repo
         run: |
-          git config user.name "github-actions[bot]"
+          DEVELOP_VERSION=$(grep '__version__' src/brapi/__version__.py \
+            | sed 's/.*"\(.*\)"/\1/')
+          LATEST_TAG=$(git tag --sort=-version:refname --list 'v*' \
+            | head -n1 \
+            | sed 's/^v//')
+          [ -z "$LATEST_TAG" ] && LATEST_TAG="0.0.0"
+
+          echo "Version in develop : $DEVELOP_VERSION"
+          echo "Latest release tag : $LATEST_TAG"
+
+          if [ "$DEVELOP_VERSION" = "$LATEST_TAG" ]; then
+            # Developer has not changed the version — auto-bump minor
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG"
+            RELEASE_VERSION="${MAJOR}.$((MINOR + 1)).0"
+            echo "auto_bumped=true"  >> $GITHUB_OUTPUT
+          else
+            # Developer manually set the version — honour it
+            RELEASE_VERSION="$DEVELOP_VERSION"
+            echo "auto_bumped=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+          echo "Release version    : $RELEASE_VERSION"
+
+      # ── 7. Write new version into source files & push back to develop ──────
+      # Uses [skip ci] so this push does not re-trigger the workflow.
+      - name: Update version files on develop
+        if: steps.skip.outputs.skip != 'true'
+        working-directory: ./repo
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Fetch and switch to master
+
+          sed -i "s/__version__ = \".*\"/__version__ = \"$RELEASE_VERSION\"/" \
+            src/brapi/__version__.py
+          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" \
+            pyproject.toml
+
+          git add src/brapi/__version__.py pyproject.toml
+          if ! git diff --cached --quiet; then
+            git commit -m "[skip ci] chore: bump version to $RELEASE_VERSION"
+            git push origin develop
+          fi
+
+      # ── 8. Merge develop → master and add generated files ─────────────────
+      - name: Publish generated files to master
+        if: steps.skip.outputs.skip != 'true'
+        working-directory: ./repo
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
           git fetch origin master
           git checkout master
-          # Merge develop (non-generated source) into master
-          git merge develop --no-edit -m "GitHub Action - Merge develop into master"
-          # Force-add the generated files (they are .gitignore'd on develop but not on master)
+          git merge develop --no-edit \
+            -m "GitHub Action - Generate Python files from JSON Schema v$RELEASE_VERSION"
+
+          # Force-add generated files (gitignored on develop, tracked on master)
           git add -f src/brapi/_compat.py
           git add -f src/brapi/generated_*.py
           git add -f src/brapi/entities/generated_*.py
           git add -f src/brapi/entities/__init__.py
           git add -f notebooks/
-          # Commit only if there are staged changes
-          git diff --cached --quiet || git commit -m "GitHub Action - Generate Python files from JSON Schema"
+
+          git diff --cached --quiet || \
+            git commit -m "GitHub Action - Added generated files for v$RELEASE_VERSION"
           git push origin master
+
+      # ── 9. Tag and create GitHub release ──────────────────────────────────
+      - name: Create GitHub release
+        if: steps.skip.outputs.skip != 'true'
+        working-directory: ./repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
+          git tag "v$RELEASE_VERSION"
+          git push origin "v$RELEASE_VERSION"
+          gh release create "v$RELEASE_VERSION" \
+            --title "brapi-py v$RELEASE_VERSION" \
+            --generate-notes \
+            --latest

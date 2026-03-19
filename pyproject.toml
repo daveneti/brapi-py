@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.0",
     "pandas>=2.0",
     "requests-oauth2client>=1.4",
+    "strenum>=0.4; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]

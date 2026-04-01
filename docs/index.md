@@ -75,6 +75,48 @@ cd brapi-py
 pip install -e ".[dev,docs]"
 ```
 
+## Local Configuration
+
+Credentials are read from environment variables or a `.env` file in the project root.
+**Never hard-code secrets in notebooks or source files.**
+
+| Variable | Description |
+|---|---|
+| `BRAPI_BASE_URL` | Full base URL of the BrAPI server |
+| `BRAPI_TOKEN_ENDPOINT` | OAuth2 token endpoint (omit for unauthenticated servers) |
+| `BRAPI_CLIENT_ID` | OAuth2 client ID |
+| `BRAPI_CLIENT_SECRET` | OAuth2 client secret |
+| `BRAPI_USERNAME` | Username (OAuth2 password flow only) |
+| `BRAPI_PASSWORD` | Password (OAuth2 password flow only) |
+
+**Setup**
+
+```bash
+cp .env.example .env   # then fill in your values
+```
+
+`.env` is git-ignored and will never be committed. `.env.example` is the safe-to-commit
+template — keep it updated for teammates.
+
+Once `.env` exists, `BrapiClient()` with no arguments picks up all credentials automatically:
+
+```python
+from brapi import BrapiClient
+
+client = BrapiClient()   # reads BRAPI_* vars from .env / environment
+```
+
+You can also pass credentials explicitly if needed:
+
+```python
+client = BrapiClient(
+    base_url="https://brapi.example.org",
+    token_endpoint="https://brapi.example.org/token",
+    client_id="my-client",
+    client_secret="my-secret",
+)
+```
+
 ## Quick Start
 
 The pattern below works identically for every generated entity —
@@ -110,5 +152,5 @@ with BrapiClient(
     client.germplasm.delete(created.germplasmDbId)
 ```
 
-See [Germplasm](usage/germplasm.md) for a detailed walkthrough — it documents
-every feature of the generated entity pattern using Germplasm as the worked example.
+See [Working with Entities](usage/entities.md) for a detailed walkthrough — it documents
+every feature of the entity pattern using Germplasm as the worked example.

@@ -1,7 +1,8 @@
 apply plugin : "java"
 ext {
   javaMainClass = 'org.brapi.schematools.cli.BrAPICommand'
-  brapiSchemaToolsVersion = '0.58.0'
+  brapiSchemaToolsVersion = '0.60.0'
+  localCliInstallDir = file('../../brapi-schema-tools/java/cli/build/install/BrAPI/lib')
 }
 
 repositories {
@@ -9,25 +10,46 @@ repositories {
   maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
 }
 
-dependencies {
-  implementation "org.brapi.brapi-schema-tools:brapi-schema-tools-cli:$brapiSchemaToolsVersion"
+configurations {
+  publishedCli
 }
+
+dependencies {
+  publishedCli "org.brapi.brapi-schema-tools:brapi-schema-tools-cli:$brapiSchemaToolsVersion"
+}
+
+def generateArgs = [
+  'generate', '../BrAPI/Specification/BrAPI-Schema',
+  '-l', 'PYTHON',
+  '-f', './',
+  '-o', 'generator/python-options.yaml',
+  '-x', '-r', '-t'
+]
 
 tasks.register("generatePython", JavaExec) {
   group = 'BrAPI'
-  description = 'Generate Python files from the JSON Schema'
-  classpath = sourceSets.main.runtimeClasspath
+  description = 'Generate Python files using the published brapi-schema-tools artifact'
+  classpath = configurations.publishedCli
   mainClass = javaMainClass
   workingDir = '../'
-  def specificationDirectory = '../BrAPI/Specification/BrAPI-Schema'
-  def outputDirectory = './'
-  args = ['generate', specificationDirectory,
-          '-l', 'PYTHON',
-          '-f', outputDirectory,
-          '-o', 'generator/python-options.yaml',
-          '-x',
-          '-r',
-          '-t']
+  args = generateArgs
+}
+
+tasks.register("buildLocalCli", Exec) {
+  group = 'BrAPI'
+  description = 'Build the local brapi-schema-tools CLI distribution'
+  workingDir = file('../../brapi-schema-tools/java')
+  commandLine 'cmd', '/c', 'gradlew.bat', ':cli:installDist'
+}
+
+tasks.register("generatePythonLocal", JavaExec) {
+  dependsOn 'buildLocalCli'
+  group = 'BrAPI'
+  description = 'Generate Python files using local brapi-schema-tools source'
+  classpath = fileTree(localCliInstallDir) { include '*.jar' }
+  mainClass = javaMainClass
+  workingDir = '../'
+  args = generateArgs
 }
 
 tasks.register("generateAll") {

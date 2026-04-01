@@ -84,6 +84,38 @@ Each generated entity file must:
 2. Define a `*Query` class that extends `BaseQuery`.
 3. Register any entity-specific normalisation logic (e.g. flattening nested objects to DataFrame columns).
 
+## Local Configuration
+
+Credentials are read from environment variables (or a `.env` file in the project root).
+**Never hard-code secrets in notebooks or source files.**
+
+| Variable | Description |
+|---|---|
+| `BRAPI_BASE_URL` | Full base URL of the BrAPI server |
+| `BRAPI_TOKEN_ENDPOINT` | OAuth2 token endpoint (omit for unauthenticated servers) |
+| `BRAPI_CLIENT_ID` | OAuth2 client ID |
+| `BRAPI_CLIENT_SECRET` | OAuth2 client secret |
+| `BRAPI_USERNAME` | Username (OAuth2 password flow only) |
+| `BRAPI_PASSWORD` | Password (OAuth2 password flow only) |
+
+**Setup**
+
+```bash
+# Copy the template and fill in your values
+cp .env.example .env
+```
+
+`.env` is listed in `.gitignore` and will never be committed.
+`.env.example` is the safe-to-commit template — keep it up to date for teammates.
+
+Once `.env` exists, `BrapiClient()` with no arguments picks up all credentials automatically:
+
+```python
+from brapi import BrapiClient
+
+client = BrapiClient()   # reads BRAPI_* from .env / environment
+```
+
 ## Installation (development)
 
 ```bash

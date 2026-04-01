@@ -5,6 +5,12 @@
 *.env
 
 # =============================================================================
+# Lock files — brapi-py is a library; consumers manage their own lock files
+# =============================================================================
+uv.lock
+poetry.lock
+
+# =============================================================================
 # Generated files — ignored on develop, tracked on master
 # The CI workflow strips these lines when it merges develop → master.
 # =============================================================================
@@ -82,6 +88,8 @@ docs/_templates/
 target/
 
 # Jupyter Notebook
+# notebooks/ are generated and committed to master by the GitHub Action — do not commit from develop
+notebooks/
 .ipynb_checkpoints
 *.ipynb_checkpoints/
 

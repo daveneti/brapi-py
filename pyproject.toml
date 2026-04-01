@@ -25,6 +25,7 @@ dev = [
     "respx",           # httpx mock library
     "ruff",
     "python-dotenv",   # load credentials from .env in notebooks
+    "ipykernel",       # Jupyter kernel for VS Code notebooks
 ]
 docs = [
     "mkdocs>=1.6",

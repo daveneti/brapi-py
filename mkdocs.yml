@@ -54,7 +54,7 @@ plugins:
 nav:
   - Home: index.md
   - Usage:
-      - Germplasm: usage/germplasm.md
+      - Working with Entities: usage/entities.md
   - API Reference:
       - GermplasmQuery: api/germplasm.md
       - BrapiResult: api/result.md

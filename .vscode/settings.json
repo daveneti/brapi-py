@@ -1,3 +1,4 @@
 {
-    "python.analysis.diagnosticMode": "workspace"
+    "python.analysis.diagnosticMode": "workspace",
+    "java.compile.nullAnalysis.mode": "automatic"
 }
